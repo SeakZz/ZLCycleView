@@ -8,6 +8,8 @@
 
 #import "ZLCycleView.h"
 
+static NSString * const reuseIdentifier = @"ZLCycleCell";
+
 @interface ZLCycleView () <UICollectionViewDelegate, UICollectionViewDataSource, UIScrollViewDelegate>
 
 @property (nonatomic, strong) UICollectionViewFlowLayout *layout;
@@ -53,8 +55,11 @@
     if (_needReload) {
         self.layout.itemSize = self.bounds.size;
         self.collectionView.frame = self.bounds;
-        if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
+        if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
             self.pageControl.frame = _pageControlFrame;
+        }
+        if (![self.dataSource respondsToSelector:@selector(cycleView:cellForItemAtRow:)]) {
+            [self registerNormalCell];
         }
         [self reloadData];
         _needReload = NO;
@@ -75,6 +80,16 @@
         }
     }
 }
+- (void)applicationBecomeActive:(NSNotification *)noti {
+    if (_isAutoPlay) {
+        [self startCycle];
+    }
+}
+- (void)applicationEnterBackground:(NSNotification *)noti {
+    if (_isAutoPlay) {
+        [self stopCycle];
+    }
+}
 
 - (void)dealloc {
     if (_isAutoPlay) {
@@ -82,6 +97,7 @@
     }
     self.delegate = nil;
     self.dataSource = nil;
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - method
@@ -91,6 +107,11 @@
     _needReload = YES;
     _scrollDirection = UICollectionViewScrollDirectionHorizontal;
     _hidesForSinglePage = YES;
+    _hasPage = YES;
+    self.scrollEnabled = YES;
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationBecomeActive:) name:UIApplicationWillEnterForegroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationEnterBackground:) name: UIApplicationDidEnterBackgroundNotification object:nil];
     
     [self setupCollectionView];
 }
@@ -109,6 +130,10 @@
     [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionNone animated:animated];
 }
 
+- (void)registerNormalCell {
+    [self.collectionView registerClass:[ZLCycleViewCell class]  forCellWithReuseIdentifier:reuseIdentifier];
+}
+
 #pragma mark - override method
 - (void)reloadData {
     [self.collectionView reloadData];
@@ -125,11 +150,12 @@
         _totalItems = _totalPages;
     }
     if (_totalPages > 1) {
-        self.collectionView.scrollEnabled = YES;
-        _totalItems = _totalPages * 100;
+        self.collectionView.scrollEnabled = self.scrollEnabled;
+        _totalItems = _totalPages * 10000;
     }
-    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
         self.pageControl.numberOfPages = _totalPages;
+        self.pageControl.currentPage = _currentPage;
         if (_hidesForSinglePage) {
             self.pageControl.hidden = _totalPages == 1;
         }
@@ -154,7 +180,7 @@
 #pragma mark - scrollviewdelegate
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
     
-    if (![self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
+    if (![self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] && !self.hasPage) {
         return;
     }
     
@@ -164,7 +190,9 @@
     if ([self.delegate respondsToSelector:@selector(cycleView:pageControl:currentIndex:)]) {
         [self.delegate cycleView:self pageControl:self.pageControl currentIndex:[self pageControlCurrentPage]];
     } else {
-        self.pageControl.currentPage = [self pageControlCurrentPage];
+        if (![self.delegate respondsToSelector:@selector(cycleViewDidScrollToNext:pageControl:currentIndex:)]) {
+            self.pageControl.currentPage = [self pageControlCurrentPage];
+        }
     }
     _currentPage = [self pageControlCurrentPage];
 }
@@ -178,6 +206,23 @@
     
     if (_isAutoPlay) {
         [self setupTimer];
+    }
+    
+    
+    if ([self.delegate respondsToSelector:@selector(cycleViewDidScrollToNext:pageControl:currentIndex:)]) {
+        if (![self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] && !self.hasPage) {
+            return;
+        }
+        [self.delegate cycleViewDidScrollToNext:self pageControl:self.pageControl currentIndex:[self pageControlCurrentPage]];
+    }
+}
+- (void)scrollViewDidEndScrollingAnimation:(UIScrollView *)scrollView {
+    
+    if ([self.delegate respondsToSelector:@selector(cycleViewDidScrollToNext:pageControl:currentIndex:)]) {
+        if (![self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] && !self.hasPage) {
+            return;
+        }
+        [self.delegate cycleViewDidScrollToNext:self pageControl:self.pageControl currentIndex:[self pageControlCurrentPage]];
     }
 }
 
@@ -200,9 +245,16 @@
     if ([self.dataSource respondsToSelector:@selector(cycleView:cellForItemAtRow:)]) {
         
         return [self.dataSource cycleView:self cellForItemAtRow:indexPath.row % _totalPages];
+    } else {
+        
+        ZLCycleViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:reuseIdentifier forIndexPath:indexPath];
+        
+        if ([self.dataSource respondsToSelector:@selector(cycleView:imageViewForItem:atRow:)]) {
+            [self.dataSource cycleView:self imageViewForItem:cell.imageView atRow:indexPath.row % _totalPages];
+        }
+        
+        return cell;
     }
-    
-    return nil;
 }
 
 
@@ -216,7 +268,15 @@
 #pragma mark - init
 - (UIPageControl *)pageControl {
     if (!_pageControl) {
-        _pageControl = [self.dataSource pageControlInCycleView:self];
+        if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
+            
+            _pageControl = [self.dataSource pageControlInCycleView:self];
+        } else {
+            
+            _pageControl = [[UIPageControl alloc] initWithFrame:CGRectMake(0, self.frame.size.height - 30, self.frame.size.width, 30)];
+            _pageControl.currentPageIndicatorTintColor = [UIColor whiteColor];
+            _pageControl.pageIndicatorTintColor = [UIColor grayColor];
+        }
         _pageControlFrame = _pageControl.frame;
         _pageControl.userInteractionEnabled = NO;
         [self addSubview:_pageControl];
@@ -263,7 +323,48 @@
     self.layout.scrollDirection = scrollDirection;
 }
 
+- (void)setCurrentPageIndicatorTintColor:(UIColor *)currentPageIndicatorTintColor {
+    _currentPageIndicatorTintColor = currentPageIndicatorTintColor;
+    
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
+        self.pageControl.currentPageIndicatorTintColor = currentPageIndicatorTintColor;
+    }
+}
+- (void)setPageIndicatorTintColor:(UIColor *)pageIndicatorTintColor {
+    _pageIndicatorTintColor = pageIndicatorTintColor;
+    
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
+        self.pageControl.pageIndicatorTintColor = pageIndicatorTintColor;
+    }
+}
+- (void)setBackgroundColor:(UIColor *)backgroundColor {
+    [super setBackgroundColor:backgroundColor];
+    
+    self.collectionView.backgroundColor = backgroundColor;
+}
+
 
 @end
 
 
+#pragma mark - 
+#pragma cell
+
+@implementation ZLCycleViewCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self addSubview:self.imageView];
+    }
+    return self;
+}
+
+- (UIImageView *)imageView {
+    if (!_imageView) {
+        _imageView = [[UIImageView alloc] initWithFrame:self.bounds];
+    }
+    return _imageView;
+}
+
+@end

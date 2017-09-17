@@ -14,8 +14,10 @@
 @optional
 /** 点击图片回调 */
 - (void)cycleView:(ZLCycleView *)cycleView didSelectItemAtRow:(NSInteger)idx;
-/** 翻页回调 */
+/** 翻页回调(半页, 实现之后自己控制pagecontrol翻页) */
 - (void)cycleView:(ZLCycleView *)cycleView pageControl:(UIPageControl *)pageControl currentIndex:(NSInteger)idx;
+/** 翻页回调(整页, 实现之后自己控制pagecontrol翻页) */
+- (void)cycleViewDidScrollToNext:(ZLCycleView *)cycleView pageControl:(UIPageControl *)pageControl currentIndex:(NSInteger)idx;
 
 @end
 
@@ -24,10 +26,12 @@
 @required
 /** 数据源数量 */
 - (NSInteger)numberOfItemsInCycleView:(ZLCycleView *)cycleView;
-/** 自定义cell */
-- (__kindof UICollectionViewCell *)cycleView:(ZLCycleView *)cycleView cellForItemAtRow:(NSInteger)row;
 
 @optional
+/** 设置图片数据源(不使用自定义cell时实现) */
+- (void)cycleView:(ZLCycleView *)cycleView imageViewForItem:(UIImageView *)imageView atRow:(NSInteger)row;
+/** 自定义cell */
+- (__kindof UICollectionViewCell *)cycleView:(ZLCycleView *)cycleView cellForItemAtRow:(NSInteger)row;
 /** 自定义pagecontrol */
 - (__kindof UIPageControl *)pageControlInCycleView:(ZLCycleView *)cycleView;
 
@@ -47,8 +51,16 @@
 /** 滚动方向 default horizontal */
 @property (nonatomic, assign) UICollectionViewScrollDirection scrollDirection;
 
+@property (nonatomic, assign) BOOL scrollEnabled;
+
 /** 数量为1时隐藏pagecontrol */
 @property (nonatomic, assign) BOOL hidesForSinglePage;
+/** 是否使用默认pagecontrol  default YES 实现自定义为NO */
+@property (nonatomic, assign) BOOL hasPage;
+/** 当前page颜色 */
+@property (nonatomic, strong) UIColor *currentPageIndicatorTintColor;
+/** page颜色 */
+@property (nonatomic, strong) UIColor *pageIndicatorTintColor;
 
 /** 重载 */
 - (void)reloadData;
@@ -64,3 +76,10 @@
 
 @end
 
+
+
+@interface ZLCycleViewCell : UICollectionViewCell
+
+@property (nonatomic, strong) UIImageView *imageView;
+
+@end
