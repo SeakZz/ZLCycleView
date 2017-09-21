@@ -51,6 +51,7 @@
 /** 滚动方向 default horizontal */
 @property (nonatomic, assign) UICollectionViewScrollDirection scrollDirection;
 
+/** 是否能滑动 */
 @property (nonatomic, assign) BOOL scrollEnabled;
 
 /** 数量为1时隐藏pagecontrol */
@@ -69,7 +70,7 @@
 - (void)startCycle;
 - (void)stopCycle;
 
-/** 注册cell */
+/** 注册cell(自定义cell时注册cell) */
 - (void)registerClass:(Class)cellClass forCellWithReuseIdentifier:(NSString *)identifier;
 - (void)registerNib:(UINib *)nib forCellWithReuseIdentifier:(NSString *)identifier;
 - (__kindof UICollectionViewCell *)dequeueReusableCellWithReuseIdentifier:(NSString *)identifier forRow:(NSInteger)row;

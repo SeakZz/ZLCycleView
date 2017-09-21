@@ -27,7 +27,6 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
 @implementation ZLCycleView {
     
     BOOL _needReload;
-    CGRect _pageControlFrame;
     NSInteger _currentPage;
 }
 
@@ -56,7 +55,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
         self.layout.itemSize = self.bounds.size;
         self.collectionView.frame = self.bounds;
         if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
-            self.pageControl.frame = _pageControlFrame;
+            [self addSubview:self.pageControl];
         }
         if (![self.dataSource respondsToSelector:@selector(cycleView:cellForItemAtRow:)]) {
             [self registerNormalCell];
@@ -277,9 +276,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
             _pageControl.currentPageIndicatorTintColor = [UIColor whiteColor];
             _pageControl.pageIndicatorTintColor = [UIColor grayColor];
         }
-        _pageControlFrame = _pageControl.frame;
         _pageControl.userInteractionEnabled = NO;
-        [self addSubview:_pageControl];
     }
     return _pageControl;
 }
