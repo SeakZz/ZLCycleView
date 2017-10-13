@@ -56,7 +56,7 @@
 
 /** 数量为1时隐藏pagecontrol */
 @property (nonatomic, assign) BOOL hidesForSinglePage;
-/** 是否使用默认pagecontrol  default YES 实现自定义为NO */
+/** 是否使用默认pagecontrol  default YES */
 @property (nonatomic, assign) BOOL hasPage;
 /** 当前page颜色 */
 @property (nonatomic, strong) UIColor *currentPageIndicatorTintColor;
@@ -66,13 +66,16 @@
 /** 重载 */
 - (void)reloadData;
 
-/** 开始/结束播放 */
+/** 开始轮播 */
 - (void)startCycle;
+/** 结束轮播 */
 - (void)stopCycle;
 
 /** 注册cell(自定义cell时注册cell) */
 - (void)registerClass:(Class)cellClass forCellWithReuseIdentifier:(NSString *)identifier;
+/** 注册cell(自定义cell时注册cell) */
 - (void)registerNib:(UINib *)nib forCellWithReuseIdentifier:(NSString *)identifier;
+/** 重用cell(自定义cell) */
 - (__kindof UICollectionViewCell *)dequeueReusableCellWithReuseIdentifier:(NSString *)identifier forRow:(NSInteger)row;
 
 @end

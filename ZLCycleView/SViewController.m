@@ -41,7 +41,7 @@
     for (UIView *v in cell.contentView.subviews) {
         [v removeFromSuperview];
     }
-    UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, cell.contentView.bounds.size.width, 300)];
+    UIImageView *iv = [[UIImageView alloc] initWithFrame:CGRectMake(20, 0, cell.contentView.bounds.size.width - 40, 300)];
     iv.image = [UIImage imageNamed:self.array[row]];
     
     [cell.contentView addSubview:iv];

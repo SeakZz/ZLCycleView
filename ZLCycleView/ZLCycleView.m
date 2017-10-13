@@ -26,7 +26,6 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
 
 @implementation ZLCycleView {
     
-    BOOL _needReload;
     NSInteger _currentPage;
 }
 
@@ -51,18 +50,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
 - (void)layoutSubviews {
     [super layoutSubviews];
     
-    if (_needReload) {
-        self.layout.itemSize = self.bounds.size;
-        self.collectionView.frame = self.bounds;
-        if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
-            [self addSubview:self.pageControl];
-        }
-        if (![self.dataSource respondsToSelector:@selector(cycleView:cellForItemAtRow:)]) {
-            [self registerNormalCell];
-        }
-        [self reloadData];
-        _needReload = NO;
-    }
+    [self _layout];
 }
 
 
@@ -94,16 +82,97 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
     if (_isAutoPlay) {
         [self stopCycle];
     }
-    self.delegate = nil;
-    self.dataSource = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - life
+- (UIPageControl *)normalPageControl {
+    UIPageControl *page = [[UIPageControl alloc] init];
+    page.currentPageIndicatorTintColor = [UIColor whiteColor];
+    page.pageIndicatorTintColor = [UIColor grayColor];
+    return page;
+}
+- (UICollectionView *)collectionView {
+    if (!_collectionView) {
+        
+        self.layout = [[UICollectionViewFlowLayout alloc] init];
+        self.layout.scrollDirection = _scrollDirection;
+        self.layout.minimumLineSpacing = 0;
+        
+        _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:self.layout];
+        
+        _collectionView.pagingEnabled = YES;
+        _collectionView.backgroundColor = [UIColor whiteColor];
+        _collectionView.delegate = self;
+        _collectionView.dataSource = self;
+        _collectionView.showsHorizontalScrollIndicator = NO;
+        _collectionView.showsVerticalScrollIndicator = NO;
+    }
+    return _collectionView;
+}
+- (void)setupTimer {
+    [self stopCycle];
+    if (_totalPages <= 1) {
+        return;
+    }
+    
+    dispatch_queue_t queue = dispatch_queue_create("com.timer.zl", DISPATCH_QUEUE_CONCURRENT);
+    self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    dispatch_source_set_timer(self.timer, dispatch_walltime(DISPATCH_TIME_NOW, _waitTime * NSEC_PER_SEC), _waitTime * NSEC_PER_SEC, 0 * NSEC_PER_SEC);
+    dispatch_source_set_event_handler(self.timer, ^{
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self scrollToRow:[self currentIndex] + 1 animated:YES];
+        });
+    });
+    dispatch_resume(self.timer);
+}
+
+- (void)setDataSource:(id<ZLCycleViewDatasource>)dataSource {
+    _dataSource = dataSource;
+    
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
+        self.pageControl = [self.dataSource pageControlInCycleView:self];
+    } else {
+        self.pageControl = [self normalPageControl];
+    }
+    self.pageControl.userInteractionEnabled = NO;
+    [self addSubview:self.pageControl];
+    
+    if (![self.dataSource respondsToSelector:@selector(cycleView:cellForItemAtRow:)]) {
+        [self registerNormalCell];
+    }
+}
+- (void)setScrollDirection:(UICollectionViewScrollDirection)scrollDirection {
+    _scrollDirection = scrollDirection;
+    
+    self.layout.scrollDirection = scrollDirection;
+}
+
+- (void)setCurrentPageIndicatorTintColor:(UIColor *)currentPageIndicatorTintColor {
+    _currentPageIndicatorTintColor = currentPageIndicatorTintColor;
+    
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
+        self.pageControl.currentPageIndicatorTintColor = currentPageIndicatorTintColor;
+    }
+}
+- (void)setPageIndicatorTintColor:(UIColor *)pageIndicatorTintColor {
+    _pageIndicatorTintColor = pageIndicatorTintColor;
+    
+    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
+        self.pageControl.pageIndicatorTintColor = pageIndicatorTintColor;
+    }
+}
+- (void)setBackgroundColor:(UIColor *)backgroundColor {
+    [super setBackgroundColor:backgroundColor];
+    
+    self.collectionView.backgroundColor = backgroundColor;
 }
 
 #pragma mark - method
 - (void)setupInitialStatus {
     _waitTime = 4;
     _isAutoPlay = NO;
-    _needReload = YES;
     _scrollDirection = UICollectionViewScrollDirectionHorizontal;
     _hidesForSinglePage = YES;
     _hasPage = YES;
@@ -112,18 +181,8 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationBecomeActive:) name:UIApplicationWillEnterForegroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationEnterBackground:) name: UIApplicationDidEnterBackgroundNotification object:nil];
     
-    [self setupCollectionView];
+    [self addSubview:self.collectionView];
 }
-- (void)startCycle {
-    [self setupTimer];
-}
-- (void)stopCycle {
-    if (self.timer) {
-        dispatch_source_cancel(self.timer);
-        self.timer = nil;
-    }
-}
-
 - (void)scrollToRow:(NSInteger)row animated:(BOOL)animated {
     NSIndexPath *indexPath = [NSIndexPath indexPathForRow:row inSection:0];
     [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionNone animated:animated];
@@ -133,9 +192,20 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
     [self.collectionView registerClass:[ZLCycleViewCell class]  forCellWithReuseIdentifier:reuseIdentifier];
 }
 
-#pragma mark - override method
+- (void)_layout {
+    
+    self.layout.itemSize = self.bounds.size;
+    self.collectionView.frame = self.bounds;
+    if ((![self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] && self.hasPage)) {
+        self.pageControl.frame = CGRectMake(0, self.frame.size.height - 30, self.frame.size.width, 30);
+    }
+    
+    [self reloadData];
+}
+
+
+#pragma mark - public method
 - (void)reloadData {
-    [self.collectionView reloadData];
     _currentPage = 0;
     
     if ([self.dataSource respondsToSelector:@selector(numberOfItemsInCycleView:)]) {
@@ -159,11 +229,23 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
             self.pageControl.hidden = _totalPages == 1;
         }
     }
+    self.pageControl.hidden = !self.hasPage;
+    
     if (_isAutoPlay) {
         [self setupTimer];
     }
     
+    [self.collectionView reloadData];
     [self scrollToRow:_totalItems/2 animated:NO];
+}
+- (void)startCycle {
+    [self setupTimer];
+}
+- (void)stopCycle {
+    if (self.timer) {
+        dispatch_source_cancel(self.timer);
+        self.timer = nil;
+    }
 }
 - (void)registerClass:(nullable Class)cellClass forCellWithReuseIdentifier:(NSString *)identifier {
     [self.collectionView registerClass:cellClass forCellWithReuseIdentifier:identifier];
@@ -264,89 +346,14 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
     }
 }
 
-#pragma mark - init
-- (UIPageControl *)pageControl {
-    if (!_pageControl) {
-        if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)]) {
-            
-            _pageControl = [self.dataSource pageControlInCycleView:self];
-        } else {
-            
-            _pageControl = [[UIPageControl alloc] initWithFrame:CGRectMake(0, self.frame.size.height - 30, self.frame.size.width, 30)];
-            _pageControl.currentPageIndicatorTintColor = [UIColor whiteColor];
-            _pageControl.pageIndicatorTintColor = [UIColor grayColor];
-        }
-        _pageControl.userInteractionEnabled = NO;
-    }
-    return _pageControl;
-}
-- (void)setupCollectionView {
-    self.layout = [[UICollectionViewFlowLayout alloc] init];
-    self.layout.scrollDirection = _scrollDirection;
-    self.layout.minimumLineSpacing = 0;
-    
-    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:self.layout];
-    
-    self.collectionView.pagingEnabled = YES;
-    self.collectionView.backgroundColor = [UIColor whiteColor];
-    self.collectionView.delegate = self;
-    self.collectionView.dataSource = self;
-    self.collectionView.showsHorizontalScrollIndicator = NO;
-    self.collectionView.showsVerticalScrollIndicator = NO;
-    [self addSubview:self.collectionView];
-    
-}
-- (void)setupTimer {
-    [self stopCycle];
-    if (_totalPages <= 1) {
-        return;
-    }
-    
-    dispatch_queue_t queue = dispatch_queue_create("com.timer.zl", DISPATCH_QUEUE_CONCURRENT);
-    self.timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
-    dispatch_source_set_timer(self.timer, dispatch_walltime(DISPATCH_TIME_NOW, _waitTime * NSEC_PER_SEC), _waitTime * NSEC_PER_SEC, 0 * NSEC_PER_SEC);
-    dispatch_source_set_event_handler(self.timer, ^{
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self scrollToRow:[self currentIndex] + 1 animated:YES];
-        });
-    });
-    dispatch_resume(self.timer);
-}
-
-- (void)setScrollDirection:(UICollectionViewScrollDirection)scrollDirection {
-    _scrollDirection = scrollDirection;
-    
-    self.layout.scrollDirection = scrollDirection;
-}
-
-- (void)setCurrentPageIndicatorTintColor:(UIColor *)currentPageIndicatorTintColor {
-    _currentPageIndicatorTintColor = currentPageIndicatorTintColor;
-    
-    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
-        self.pageControl.currentPageIndicatorTintColor = currentPageIndicatorTintColor;
-    }
-}
-- (void)setPageIndicatorTintColor:(UIColor *)pageIndicatorTintColor {
-    _pageIndicatorTintColor = pageIndicatorTintColor;
-    
-    if ([self.dataSource respondsToSelector:@selector(pageControlInCycleView:)] || self.hasPage) {
-        self.pageControl.pageIndicatorTintColor = pageIndicatorTintColor;
-    }
-}
-- (void)setBackgroundColor:(UIColor *)backgroundColor {
-    [super setBackgroundColor:backgroundColor];
-    
-    self.collectionView.backgroundColor = backgroundColor;
-}
-
-
 @end
 
 
-#pragma mark - 
-#pragma cell
 
+
+/**
+ default cell
+ */
 @implementation ZLCycleViewCell
 
 - (instancetype)initWithFrame:(CGRect)frame {
