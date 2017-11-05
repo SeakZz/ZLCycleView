@@ -27,6 +27,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
 @implementation ZLCycleView {
     
     NSInteger _currentPage;
+    BOOL _autoFirstLoad;
 }
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -177,6 +178,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
     _hidesForSinglePage = YES;
     _hasPage = YES;
     self.scrollEnabled = YES;
+    _autoFirstLoad = YES;
     
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationBecomeActive:) name:UIApplicationWillEnterForegroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationEnterBackground:) name: UIApplicationDidEnterBackgroundNotification object:nil];
@@ -200,7 +202,10 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
         self.pageControl.frame = CGRectMake(0, self.frame.size.height - 30, self.frame.size.width, 30);
     }
     
-    if (!self.totalPages) [self reloadData];
+    if (_autoFirstLoad) {
+        [self reloadData];
+        _autoFirstLoad = NO;
+    }
 }
 
 
