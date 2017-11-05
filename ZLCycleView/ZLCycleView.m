@@ -200,7 +200,7 @@ static NSString * const reuseIdentifier = @"ZLCycleCell";
         self.pageControl.frame = CGRectMake(0, self.frame.size.height - 30, self.frame.size.width, 30);
     }
     
-    [self reloadData];
+    if (!self.totalPages) [self reloadData];
 }
 
 
